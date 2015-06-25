@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
@@ -29,9 +30,59 @@ namespace TestScreenshot
         private void Form1_Load(object sender, EventArgs e)
         {
         }
+        private const int SW_SHOWNORMAL = 1;
+        private const int SW_SHOWMINIMIZED = 2;
+        private const int SW_SHOWMAXIMIZED = 3;
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        public IntPtr FindWindow(string title)
+        {
+            Process[] processes = Process.GetProcesses();
+            foreach (var process in processes)
+            {
+                if (process.MainWindowTitle.ToLower().Contains(title.ToLower()) ||
+                    process.ProcessName.ToLower().Contains(title.ToLower()))
+                {
+                    return process.MainWindowHandle;
+                }
+            }
+            return IntPtr.Zero;
+        }
         private void btnInject_Click(object sender, EventArgs e)
         {
+            // retrieve Notepad main window handle
+            IntPtr hWnd = FindWindow(textBox1.Text);
+            if (!hWnd.Equals(IntPtr.Zero))
+            {
+                // SW_SHOWMAXIMIZED to maximize the window
+                // SW_SHOWMINIMIZED to minimize the window
+                // SW_SHOWNORMAL to make the window be normal size
+                ShowWindowAsync(hWnd, SW_SHOWMAXIMIZED);
+                SetForegroundWindow(hWnd);
+                Visible = false;
+                Thread.Sleep(300);
+                using (Bitmap bmpScreenCapture = new Bitmap(Screen.PrimaryScreen.Bounds.Width,
+                                            Screen.PrimaryScreen.Bounds.Height))
+                {
+                    using (Graphics g = Graphics.FromImage(bmpScreenCapture))
+                    {
+                        g.CopyFromScreen(Screen.PrimaryScreen.Bounds.X,
+                                         Screen.PrimaryScreen.Bounds.Y,
+                                         0, 0,
+                                         bmpScreenCapture.Size,
+                                         CopyPixelOperation.SourceCopy);
+                    }
+                    Thread.Sleep(300);
+                    ShowWindowAsync(hWnd, SW_SHOWMINIMIZED);
+                    Visible = true;
+                    bmpScreenCapture.Save("d:\\screen.png", ImageFormat.Png);
+                }
+            }
+            return;
             if (_captureProcess == null)
             {
                 btnInject.Enabled = false;
@@ -48,7 +99,7 @@ namespace TestScreenshot
                     Config.Register("Capture",
                         "Capture.dll");
                 }
-                
+
                 AttachProcess();
             }
             else
@@ -76,7 +127,7 @@ namespace TestScreenshot
         private void AttachProcess()
         {
             string exeName = Path.GetFileNameWithoutExtension(textBox1.Text);
-            
+
             Process[] processes = Process.GetProcessesByName(exeName);
             foreach (Process process in processes)
             {
@@ -217,7 +268,7 @@ namespace TestScreenshot
                     else
                     {
                         end = DateTime.Now;
-                        txtDebugLog.Text = String.Format("Debug: {0}\r\n{1}", "Total Time: " + (end-start).ToString(), txtDebugLog.Text);
+                        txtDebugLog.Text = String.Format("Debug: {0}\r\n{1}", "Total Time: " + (end - start).ToString(), txtDebugLog.Text);
                     }
                 })
             );
@@ -232,28 +283,28 @@ namespace TestScreenshot
         void Callback(IAsyncResult result)
         {
             using (Screenshot screenshot = _captureProcess.CaptureInterface.EndGetScreenshot(result))
-            try
-            {
-                _captureProcess.CaptureInterface.DisplayInGameText("Screenshot captured...");
-                if (screenshot != null && screenshot.CapturedBitmap != null)
+                try
                 {
-                    pictureBox1.Invoke(new MethodInvoker(delegate()
+                    _captureProcess.CaptureInterface.DisplayInGameText("Screenshot captured...");
+                    if (screenshot != null && screenshot.CapturedBitmap != null)
                     {
-                        if (pictureBox1.Image != null)
+                        pictureBox1.Invoke(new MethodInvoker(delegate()
                         {
-                            pictureBox1.Image.Dispose();
-                        }
-                        pictureBox1.Image = screenshot.CapturedBitmap.ToBitmap();
-                    })
-                    );
-                }
+                            if (pictureBox1.Image != null)
+                            {
+                                pictureBox1.Image.Dispose();
+                            }
+                            pictureBox1.Image = screenshot.CapturedBitmap.ToBitmap();
+                        })
+                        );
+                    }
 
-                Thread t = new Thread(new ThreadStart(DoRequest));
-                t.Start();
-            }
-            catch
-            {
-            }
+                    Thread t = new Thread(new ThreadStart(DoRequest));
+                    t.Start();
+                }
+                catch
+                {
+                }
         }
     }
 }
